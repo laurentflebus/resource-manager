@@ -17,7 +17,7 @@ def get_db():
         db.close()
 
 
-@router.post("/reservations", response_model=ReservationResponse)
+@router.post("/reservation", response_model=ReservationResponse)
 def create_reservation(room_id: int, start_time: datetime, end_time: datetime, db: Session = Depends(get_db)):
 
     if room_id is None and equipment_id is None:
