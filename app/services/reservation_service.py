@@ -47,14 +47,15 @@ def has_equipment_conflict(db: Session, equipment_id: int, start_time:datetime, 
     Returns:
         bool: True if there is a conflict (not enough equipment available), False otherwise.
     """
-    
     equipment = db.query(Equipment).filter(Equipment.id == equipment_id).first()
     if not equipment:
         return True # equipment not found
     
-    overlapping_reservations = db.query(func.count(Reservation.id)).filter(
+    overlapping_reservations = db.query(Reservation).filter(
         Reservation.equipment_id == equipment_id,
         Reservation.start_time < end_time,
         Reservation.end_time > start_time
-    ).scalar()
+    ).count()
+    
     return overlapping_reservations >= equipment.quantity
+    

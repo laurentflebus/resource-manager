@@ -14,7 +14,7 @@ def get_db():
     finally:
         db.close()
 
-@router.post("/room", response_model=RoomResponse)
+@router.post("/rooms", response_model=RoomResponse)
 def create_room(name: str, capacity: int, location: str, db: Session = Depends(get_db)):
     room = Room(name=name, capacity=capacity, location=location)
     db.add(room)

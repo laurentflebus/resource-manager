@@ -2,7 +2,7 @@ from sqlalchemy import Column, Integer, String
 from app.database import Base
 
 class Room(Base):
-    __tablename__ = "rooms"
+    __tablename__ = "room"
 
     id = Column(Integer, primary_key=True, index=True)
     name = Column(String, nullable=False)

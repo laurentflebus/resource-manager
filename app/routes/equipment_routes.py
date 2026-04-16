@@ -15,7 +15,7 @@ def get_db():
         db.close()
 
 
-@router.post("/equipment")
+@router.post("/equipments")
 def create_equipment(name: str, quantity: int, db: Session = Depends(get_db)):
     equipment = Equipment(name=name, quantity=quantity)
     db.add(equipment)
