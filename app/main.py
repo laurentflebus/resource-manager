@@ -1,7 +1,7 @@
 from fastapi import FastAPI
 from app.database import engine, Base
 from app.models import *
-from app.routes import room_routes, reservation_routes, equipment_routes
+from app.routes import room_routes, reservation_routes, equipment_routes, auth_routes
 
 Base.metadata.create_all(bind=engine)
 
@@ -9,6 +9,7 @@ app = FastAPI()
 app.include_router(room_routes.router)
 app.include_router(reservation_routes.router)
 app.include_router(equipment_routes.router)
+app.include_router(auth_routes.router)
 
 @app.get("/")
 def root():
