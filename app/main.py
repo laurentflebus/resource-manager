@@ -1,4 +1,5 @@
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 from app.database import engine, Base
 from app.models import *
 from app.routes import room_routes, reservation_routes, equipment_routes, auth_routes
@@ -10,6 +11,8 @@ app.include_router(room_routes.router)
 app.include_router(reservation_routes.router)
 app.include_router(equipment_routes.router)
 app.include_router(auth_routes.router)
+
+app.add_middleware(CORSMiddleware, allow_origins=["http://localhost:3000"], allow_credentials=True, allow_methods=["*"], allow_headers=["*"])
 
 @app.get("/")
 def root():

@@ -40,5 +40,5 @@ def create_reservation(reservation: ReservationCreate, current_user = Depends(ge
     return db_reservation
 
 @router.get("/reservations")
-def get_all_reservations(db : Session = Depends(get_db), admin = Depends(require_admin)):
+def get_reservations(db : Session = Depends(get_db), user = Depends(get_current_user)):
     return db.query(Reservation).all()

@@ -32,8 +32,8 @@ def create_access_token(user: User) -> str:
     payload = {
         "sub" : user.email,
         "role" : user.role,
-        "exp" : expire,
-        "iat": datetime.now(timezone.utc), # (issued-at) claim — useful for token invalidation and auditing
+        "exp" : int(expire.timestamp()),
+        "iat": int(datetime.now(timezone.utc).timestamp()), # (issued-at) claim — useful for token invalidation and auditing
     }
     return jwt.encode(payload, SECRET_KEY, algorithm=ALGORITHM)
 
