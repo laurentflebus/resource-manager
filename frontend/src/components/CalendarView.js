@@ -40,6 +40,8 @@ export default function CalendarView() {
             console.error("API error:", data)
             return
         }
+        // Reset events
+        setEvents([])
 
         const formatted = data.map(r => {
 
@@ -150,6 +152,34 @@ export default function CalendarView() {
             ? events
             : events.filter(e => e.extendedProps.type === filter)
 
+    // ================ UPDATE BACKEND ===================
+
+    const handleEventDrop = async (info) => {
+
+        const event = info.event
+
+        const payload = {
+            start_time: event.start.toISOString(),
+            end_time: event.end.toISOString()
+        }
+
+        const res = await fetch(`http://127.0.0.1:8000/reservations/${event.id}`, {
+            method: "PUT",
+            headers: {
+                "Content-Type": "application/json",
+                Authorization: `Bearer ${token}`
+            },
+            body: JSON.stringify(payload)
+        })
+
+        if (!res.ok) {
+            info.revert()
+            return
+        }
+
+        fetchReservations()
+    }
+
     // ================= RENDER =================
     return (
         <div style={{ padding: 20 }}>
@@ -195,12 +225,17 @@ export default function CalendarView() {
                 selectable={true}
                 select={handleSelect}
                 events={filteredEvents}
-
                 nowIndicator={true}
                 slotMinTime="08:00:00"
                 slotMaxTime="20:00:00"
                 eventDidMount={(info) => {
+                    info.el.style.cursor = "grab"
                     const tooltip = document.createElement("div")
+
+                    tooltip.className = "fc-tooltip"
+                    tooltip.innerHTML = info.event.title
+
+                    info.el._tooltip = tooltip
 
                     tooltip.innerHTML = `<strong>${info.event.title}</strong><br/>📍 ${info.event.extendedProps.location}`
                     tooltip.style.position = "absolute"
@@ -223,6 +258,17 @@ export default function CalendarView() {
                     info.el.addEventListener("mouseleave", () => {
                         tooltip.style.display = "none"
                     })
+                }}
+                editable={true}
+                eventStartEditable={true}
+                eventDurationEditable={true}
+                eventDrop={handleEventDrop}
+                eventResize={handleEventDrop}
+                eventChange={() => { }}
+                eventWillUnmount={(info) => {
+                    if (info.el._tooltip) {
+                        info.el._tooltip.remove()
+                    }
                 }}
             />
 

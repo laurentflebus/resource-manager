@@ -4,7 +4,7 @@ from datetime import datetime
 
 from app.database import SessionLocal
 from app.models.reservation import Reservation
-from app.schemas.reservation import ReservationCreate, ReservationResponse
+from app.schemas.reservation import ReservationCreate, ReservationResponse, ReservationUpdate
 from app.services.reservation_service import has_room_conflict, has_equipment_conflict
 from app.utils.security import get_current_user, require_admin
 
@@ -42,3 +42,14 @@ def create_reservation(reservation: ReservationCreate, current_user = Depends(ge
 @router.get("/reservations")
 def get_reservations(db : Session = Depends(get_db), user = Depends(get_current_user)):
     return db.query(Reservation).all()
+
+
+@router.put("/reservations/{id}")
+def update_reservation(id: int, payload: ReservationUpdate, db: Session = Depends(get_db)):
+    reservation = db.query(Reservation).filter(Reservation.id == id).first()
+
+    reservation.start_time = payload.start_time
+    reservation.end_time = payload.end_time
+
+    db.commit()
+    return reservation

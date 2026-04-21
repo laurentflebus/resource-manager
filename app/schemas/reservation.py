@@ -1,5 +1,6 @@
 from pydantic import BaseModel
 from datetime import datetime
+from typing import Optional
 
 
 
@@ -11,6 +12,12 @@ class ReservationBase(BaseModel):
 
 class ReservationCreate(ReservationBase):
     pass
+
+class ReservationUpdate(BaseModel):
+    start_time: Optional[datetime] = None
+    end_time: Optional[datetime] = None
+    room_id: Optional[int] = None
+    equipment_id: Optional[int] = None
 
 class ReservationResponse(ReservationBase):
     id: int
