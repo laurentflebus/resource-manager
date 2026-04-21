@@ -152,12 +152,29 @@ export default function CalendarView() {
             ? events
             : events.filter(e => e.extendedProps.type === filter)
 
+    // ================ PROTECTION SAME RESERVATION ============
+    const hasConflict = (event, allEvents) => {
+        return allEvents.some(e =>
+            e.id !== event.id &&
+            e.extendedProps.type === event.extendedProps.type &&
+            e.extendedProps.resourceId === event.extendedProps.resourceId &&
+            new Date(event.start) < new Date(e.end) &&
+            new Date(event.end) > new Date(e.start)
+        )
+    }
+
     // ================ UPDATE BACKEND ===================
 
     const handleEventDrop = async (info) => {
 
         const event = info.event
 
+        if (hasConflict(event, events)) {
+            alert("⚠️ Conflit de réservation détecté")
+            info.revert()
+            return
+        }
+        // else update backend
         const payload = {
             start_time: event.start.toISOString(),
             end_time: event.end.toISOString()
@@ -229,6 +246,9 @@ export default function CalendarView() {
                 slotMinTime="08:00:00"
                 slotMaxTime="20:00:00"
                 eventDidMount={(info) => {
+                    if (info.event.extendedProps.hasConflict) {
+                        info.el.style.backgroundColor = "#ef4444"
+                    }
                     info.el.style.cursor = "grab"
                     const tooltip = document.createElement("div")
 

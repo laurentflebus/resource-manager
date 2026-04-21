@@ -17,6 +17,14 @@ def get_db():
     finally:
         db.close()
 
+# Check DB conflit de réservation pour éviter les réservations qui se chevauchent        
+def check_conflict(db, room_id, start, end):
+    return db.query(Reservation).filter(
+        Reservation.room_id == room_id,
+        Reservation.start_time < end,
+        Reservation.end_time > start
+    ).first()
+
 
 @router.post("/reservations", response_model=ReservationResponse)
 def create_reservation(reservation: ReservationCreate, current_user = Depends(get_current_user), db: Session = Depends(get_db)):
@@ -46,6 +54,8 @@ def get_reservations(db : Session = Depends(get_db), user = Depends(get_current_
 
 @router.put("/reservations/{id}")
 def update_reservation(id: int, payload: ReservationUpdate, db: Session = Depends(get_db)):
+    if check_conflict(db, payload.room_id, payload.start_time, payload.end_time):
+        raise HTTPException(status=400, detail="Conflit de réservation")
     reservation = db.query(Reservation).filter(Reservation.id == id).first()
 
     reservation.start_time = payload.start_time
