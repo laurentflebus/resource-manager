@@ -3,6 +3,7 @@ import dayGridPlugin from "@fullcalendar/daygrid"
 import timeGridPlugin from "@fullcalendar/timegrid"
 import interactionPlugin from "@fullcalendar/interaction"
 import { useEffect, useState } from "react"
+import { useNavigate } from "react-router-dom"
 
 export default function CalendarView() {
 
@@ -19,15 +20,22 @@ export default function CalendarView() {
     const [rooms, setRooms] = useState([])
     const [equipment, setEquipment] = useState([])
 
+    const navigate = useNavigate()
+
     const token = localStorage.getItem("token")
     const role = localStorage.getItem("role")
 
     // ================= FETCH RESERVATIONS =================
     useEffect(() => {
-        if (rooms.length && equipment.length) {
+        fetchMeta()
+    }, [])
+
+    useEffect(() => {
+        if (rooms.length > 0 && equipment.length > 0) {
             fetchReservations()
         }
     }, [rooms, equipment])
+
     const fetchReservations = async () => {
         const res = await fetch("http://127.0.0.1:8000/reservations", {
             headers: {
@@ -41,13 +49,11 @@ export default function CalendarView() {
             console.error("API error:", data)
             return
         }
-        // Reset events
-        setEvents([])
 
         const formatted = data.map(r => {
 
-            const room = rooms.find(x => x.id === r.room_id)
-            const equip = equipment.find(x => x.id === r.equipment_id)
+            const room = rooms.find(x => Number(x.id) === Number(r.room_id))
+            const equip = equipment.find(x => Number(x.id) === Number(r.equipment_id))
 
             const getColor = (type, id) => {
                 if (type === "room") {
@@ -63,8 +69,8 @@ export default function CalendarView() {
                 id: r.id,
 
                 title: r.room_id
-                    ? `🏢 ${room?.name || "Salle"} - ${room?.location || "?"}`
-                    : `🧰 ${equip?.name || "Matériel"}`,
+                    ? `🏢 ${room?.name ?? r.room_name ?? "Salle inconnue"} - ${room?.location ?? "?"}`
+                    : `🧰 ${equip?.name ?? r.equipment_name ?? "Matériel inconnu"}`,
 
                 start: r.start_time,
                 end: r.end_time,
@@ -108,6 +114,17 @@ export default function CalendarView() {
 
         if (!selection || !id) return
 
+        const now = new Date()
+        if (selection.start < now || selection.end < now) {
+            alert("⛔ Impossible de créer une réservation dans le passé")
+            return
+        }
+
+        if (selection.end <= selection.start) {
+            alert("⛔ Date de fin invalide")
+            return
+        }
+
         const payload =
             type === "room"
                 ? {
@@ -135,6 +152,16 @@ export default function CalendarView() {
         fetchReservations()
     }
 
+    // ================= DELETE RESERVATION =================
+    const handleDelete = async (id) => {
+        await fetch(`http://127.0.0.1:8000/reservations/${id}`, {
+            method: "DELETE",
+            headers: {
+                Authorization: `Bearer ${token}`
+            }
+        })
+        fetchReservations()
+    }
     // ================= SELECT SLOT =================
     const handleSelect = (info) => {
         setSelection(info)
@@ -200,29 +227,7 @@ export default function CalendarView() {
 
     // ================= RENDER =================
     return (
-        <div style={{ padding: 20 }}>
-            <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 10 }}>
-
-                <h1>Calendrier</h1>
-
-                <button
-                    onClick={() => {
-                        localStorage.removeItem("token")
-                        window.location.reload()
-                    }}
-                    style={{
-                        background: "#ef4444",
-                        color: "white",
-                        border: "none",
-                        padding: "6px 12px",
-                        borderRadius: "6px",
-                        cursor: "pointer"
-                    }}
-                >
-                    Logout
-                </button>
-
-            </div>
+        <div style={{ height: "100%", display: "flex", flexDirection: "column", padding: 20 }}>
 
             {/* FILTER */}
             <div style={{ marginBottom: 10 }}>
@@ -236,12 +241,29 @@ export default function CalendarView() {
                 </select>
             </div>
 
+            <div style={{
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "center",
+                marginBottom: 10
+            }}>
+            </div>
+
             {/* CALENDAR */}
             <FullCalendar
                 plugins={[dayGridPlugin, timeGridPlugin, interactionPlugin]}
                 initialView="timeGridWeek"
+                headerToolbar={{
+                    left: "prev,next today",
+                    center: "title",
+                    right: "dayGridMonth,timeGridWeek,timeGridDay"
+                }}
+                height="100%"
                 selectable={true}
                 select={handleSelect}
+                selectAllow={(info) => {
+                    return info.start.getTime >= Date.now()
+                }}
                 events={filteredEvents}
                 nowIndicator={true}
                 slotMinTime="08:00:00"
@@ -291,6 +313,11 @@ export default function CalendarView() {
                 eventWillUnmount={(info) => {
                     if (info.el._tooltip) {
                         info.el._tooltip.remove()
+                    }
+                }}
+                eventClick={(info) => {
+                    if (window.confirm("Supprimer cette réservation ?")) {
+                        handleDelete(info.event.id)
                     }
                 }}
             />

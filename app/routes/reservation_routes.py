@@ -29,7 +29,8 @@ def check_conflict(db, room_id, start, end):
 
 @router.post("/reservations", response_model=ReservationResponse)
 def create_reservation(reservation: ReservationCreate, current_user = Depends(get_current_user), db: Session = Depends(get_db)):
-
+    if reservation.start_time < datetime.now():
+        raise HTTPException(status_code=400, detail="Impossible de réserver pour une date passée.")
     if reservation.room_id is None and reservation.equipment_id is None:
         raise HTTPException(status_code=400, detail="Vous devez spécifier au moins une salle ou un équipement pour la réservation.")
 
