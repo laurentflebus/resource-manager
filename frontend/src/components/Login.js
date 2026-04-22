@@ -22,13 +22,18 @@ export default function Login({ onLogin }) {
             })
 
             const data = await res.json()
+            const token = data.access_token
+            const payload = JSON.parse(atob(token.split('.')[1]))
+
+            console.log("LOGIN RESPONSE:", data)
 
             if (!res.ok) {
                 setError(data.detail || "Erreur login")
                 return
             }
 
-            localStorage.setItem("token", data.access_token)
+            localStorage.setItem("token", token)
+            localStorage.setItem("role", payload.role)
             onLogin()
 
         } catch (err) {

@@ -4,6 +4,7 @@ from datetime import datetime
 
 from app.database import SessionLocal
 from app.models.reservation import Reservation
+from app.models.user import User
 from app.schemas.reservation import ReservationCreate, ReservationResponse, ReservationUpdate
 from app.services.reservation_service import has_room_conflict, has_equipment_conflict
 from app.utils.security import get_current_user, require_admin
@@ -48,12 +49,17 @@ def create_reservation(reservation: ReservationCreate, current_user = Depends(ge
     return db_reservation
 
 @router.get("/reservations")
-def get_reservations(db : Session = Depends(get_db), user = Depends(get_current_user)):
-    return db.query(Reservation).all()
+def get_reservations(db : Session = Depends(get_db), current_user : User = Depends(get_current_user)):
+    if current_user.role == "admin":
+        return db.query(Reservation).all()
+    
+    return db.query(Reservation).filter(Reservation.user_id == current_user.id).all()
+    
 
 
 @router.put("/reservations/{id}")
-def update_reservation(id: int, payload: ReservationUpdate, db: Session = Depends(get_db)):
+def update_reservation(id: int, payload: ReservationUpdate, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    require_admin(current_user)
     if check_conflict(db, payload.room_id, payload.start_time, payload.end_time):
         raise HTTPException(status=400, detail="Conflit de réservation")
     reservation = db.query(Reservation).filter(Reservation.id == id).first()
@@ -63,3 +69,12 @@ def update_reservation(id: int, payload: ReservationUpdate, db: Session = Depend
 
     db.commit()
     return reservation
+
+@router.delete("/reservations/{id}")
+def delete_reservation(id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    require_admin(current_user)
+    reservation = db.query(Reservation).filter(Reservation.id == id).first()
+    db.delete(reservation)
+    db.commit()
+
+    return {"message": "reservation deleted"}

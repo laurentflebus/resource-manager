@@ -20,6 +20,7 @@ export default function CalendarView() {
     const [equipment, setEquipment] = useState([])
 
     const token = localStorage.getItem("token")
+    const role = localStorage.getItem("role")
 
     // ================= FETCH RESERVATIONS =================
     useEffect(() => {
@@ -279,7 +280,9 @@ export default function CalendarView() {
                         tooltip.style.display = "none"
                     })
                 }}
-                editable={true}
+                editable={role === "admin"}
+                eventStartEditable={role === "admin"}
+                eventDurationEditable={role === "admin"}
                 eventStartEditable={true}
                 eventDurationEditable={true}
                 eventDrop={handleEventDrop}
