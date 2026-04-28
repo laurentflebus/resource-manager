@@ -8,16 +8,15 @@ Endpoints :
     DELETE /reservations/{id}  Supprime une réservation (admin uniquement)
 """
 
-from math import ceil
 from datetime import datetime
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.models.reservation import Reservation
 from app.models.user import User
-from app.schemas.reservation import ReservationCreate, ReservationResponse, ReservationUpdate, PaginatedResponse
+from app.schemas.reservation import ReservationCreate, ReservationResponse, ReservationUpdate
 from app.services.reservation_service import has_room_conflict, has_equipment_conflict, serialize_reservation
 from app.utils.security import get_current_user, require_admin
 
@@ -63,48 +62,23 @@ def create_reservation(
     return serialize_reservation(db_reservation)
 
 
-@router.get("/reservations", response_model=PaginatedResponse)
+@router.get("/reservations", response_model=list[ReservationResponse])
 def get_reservations(
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
-    page: int = Query(default=1, ge=1, description="Numéro de page (commence à 1)"),
-    page_size: int = Query(default=20, ge=1, le=100, description="Nombre d'éléments par page (max 100)")
+    current_user: User = Depends(get_current_user)
 ):
     """
-    Retourne une page de réservations avec métadonnées de pagination.
+    Retourne la liste des réservations.
 
     - Admin : toutes les réservations.
     - Utilisateur standard : uniquement ses propres réservations.
-
-    Paramètres de pagination :
-    - page      : numéro de page, commence à 1 (défaut : 1)
-    - page_size : éléments par page, entre 1 et 100 (défaut : 20)
-
-    Exemple : GET /reservations?page=2&page_size=10
     """
-    query = db.query(Reservation)
-    if current_user.role != "admin":
-        query = query.filter(Reservation.user_id == current_user.id)
+    if current_user.role == "admin":
+        reservations = db.query(Reservation).all()
+    else:
+        reservations = db.query(Reservation).filter(Reservation.user_id == current_user.id).all()
 
-    # Compte total avant pagination — nécessaire pour les métadonnées
-    total = query.count()
-
-    # Applique la pagination avec tri par date de début (plus récent en premier)
-    reservations = (
-        query
-        .order_by(Reservation.start_time.desc())
-        .offset((page - 1) * page_size)
-        .limit(page_size)
-        .all()
-    )
-
-    return PaginatedResponse(
-        items=[serialize_reservation(r) for r in reservations],
-        total=total,
-        page=page,
-        page_size=page_size,
-        pages=ceil(total / page_size) if total > 0 else 1
-    )
+    return [serialize_reservation(r) for r in reservations]
 
 
 @router.put("/reservations/{id}", response_model=ReservationResponse)

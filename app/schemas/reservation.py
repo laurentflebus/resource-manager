@@ -2,16 +2,15 @@
 Schémas Pydantic pour les réservations.
 
 Classes :
-    ReservationBase       Champs communs (room_id, equipment_id, start_time, end_time)
-    ReservationCreate     Schéma d'entrée pour POST /reservations (hérite de Base)
-    ReservationUpdate     Schéma d'entrée pour PUT /reservations/{id} (tous les champs optionnels)
-    ReservationResponse   Schéma de sortie enrichi avec user_id, room_name, equipment_name
-    PaginatedResponse     Enveloppe paginée retournée par GET /reservations
+    ReservationBase     Champs communs (room_id, equipment_id, start_time, end_time)
+    ReservationCreate   Schéma d'entrée pour POST /reservations (hérite de Base)
+    ReservationUpdate   Schéma d'entrée pour PUT /reservations/{id} (tous les champs optionnels)
+    ReservationResponse Schéma de sortie enrichi avec user_id, room_name, equipment_name
 """
 
 from pydantic import BaseModel
 from datetime import datetime
-from typing import Optional, List
+from typing import Optional
 
 
 class ReservationBase(BaseModel):
@@ -54,30 +53,3 @@ class ReservationResponse(BaseModel):
     equipment_name: Optional[str] = None
 
     model_config = {"from_attributes": True}
-
-
-class PaginatedResponse(BaseModel):
-    """
-    Enveloppe paginée retournée par GET /reservations.
-
-    Champs :
-        items      : liste des réservations de la page courante
-        total      : nombre total de réservations (toutes pages confondues)
-        page       : numéro de la page courante (commence à 1)
-        page_size  : nombre d'éléments par page
-        pages      : nombre total de pages
-
-    Exemple de réponse :
-        {
-            "items": [...],
-            "total": 42,
-            "page": 2,
-            "page_size": 10,
-            "pages": 5
-        }
-    """
-    items: List[ReservationResponse]
-    total: int
-    page: int
-    page_size: int
-    pages: int

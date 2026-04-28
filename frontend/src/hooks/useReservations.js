@@ -61,27 +61,21 @@ export function useReservations() {
     }
 
     /**
-     * Charge une page de réservations et les formate pour FullCalendar.
-     * Lit le champ `items` de la réponse paginée retournée par l'API.
-     *
-     * @param {number} page      - Numéro de page (défaut : 1)
-     * @param {number} pageSize  - Éléments par page (défaut : 100 pour charger tout le calendrier)
+     * Charge la liste des réservations et les formate pour FullCalendar.
+     * Met à jour loading et error en conséquence.
      */
-    const fetchReservations = async (page = 1, pageSize = 100) => {
+    const fetchReservations = async () => {
         setLoading(true)
         try {
-            const res = await apiFetch(
-                `${API_URL}/reservations?page=${page}&page_size=${pageSize}`,
-                { headers: authHeader }
-            )
+            const res = await apiFetch(`${API_URL}/reservations`, { headers: authHeader })
             const data = await res.json()
 
-            if (!data.items || !Array.isArray(data.items)) {
+            if (!Array.isArray(data)) {
                 setError("Réponse inattendue du serveur")
                 return
             }
 
-            setEvents(data.items.map(r => formatReservation(r, rooms, equipment)))
+            setEvents(data.map(r => formatReservation(r, rooms, equipment)))
             setError(null)
         } catch (err) {
             setError("Impossible de charger les réservations")

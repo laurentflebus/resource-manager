@@ -105,26 +105,25 @@ class TestCreateReservation:
 class TestGetReservations:
 
     def test_admin_sees_all(self, client, admin_token, user_token, room):
-        """L'admin voit toutes les réservations — total=1 dans la réponse."""
+        """L'admin voit toutes les réservations, peu importe qui les a créées."""
         payload = {"room_id": room.id, **future_slot()}
         client.post("/reservations", json=payload, headers=auth(user_token))
 
         res = client.get("/reservations", headers=auth(admin_token))
         assert res.status_code == 200
-        data = res.json()
-        assert data["total"] == 1
-        assert len(data["items"]) == 1
+        assert len(res.json()) == 1
 
     def test_user_sees_only_own(self, client, user_token, admin_token, room, equipment):
         """Un utilisateur standard ne voit que ses propres réservations."""
+        # La réservation de l'user
         client.post("/reservations", json={"room_id": room.id, **future_slot(2, 1)}, headers=auth(user_token))
+        # Une réservation de l'admin (autre plage)
         client.post("/reservations", json={"equipment_id": equipment.id, **future_slot(5, 1)}, headers=auth(admin_token))
 
         res = client.get("/reservations", headers=auth(user_token))
         assert res.status_code == 200
-        data = res.json()
-        assert data["total"] == 1
-        assert data["items"][0]["room_id"] == room.id
+        assert len(res.json()) == 1
+        assert res.json()[0]["room_id"] == room.id
 
     def test_get_unauthenticated_fails(self, client):
         """Sans token → 401."""
@@ -132,50 +131,10 @@ class TestGetReservations:
         assert res.status_code == 401
 
     def test_empty_list(self, client, user_token):
-        """Aucune réservation → items vide et total=0."""
+        """Aucune réservation → liste vide."""
         res = client.get("/reservations", headers=auth(user_token))
         assert res.status_code == 200
-        data = res.json()
-        assert data["items"] == []
-        assert data["total"] == 0
-
-    def test_pagination_metadata(self, client, admin_token, room):
-        """Crée 3 réservations, demande page_size=2 → 2 pages, page 1 a 2 items."""
-        for i in range(3):
-            client.post("/reservations", json={
-                "room_id": room.id, **future_slot(2 + i * 3, 1)
-            }, headers=auth(admin_token))
-
-        res = client.get("/reservations?page=1&page_size=2", headers=auth(admin_token))
-        assert res.status_code == 200
-        data = res.json()
-        assert data["total"] == 3
-        assert data["pages"] == 2
-        assert data["page"] == 1
-        assert len(data["items"]) == 2
-
-    def test_pagination_page_2(self, client, admin_token, room):
-        """Page 2 avec page_size=2 sur 3 réservations → 1 item."""
-        for i in range(3):
-            client.post("/reservations", json={
-                "room_id": room.id, **future_slot(2 + i * 3, 1)
-            }, headers=auth(admin_token))
-
-        res = client.get("/reservations?page=2&page_size=2", headers=auth(admin_token))
-        assert res.status_code == 200
-        data = res.json()
-        assert data["page"] == 2
-        assert len(data["items"]) == 1
-
-    def test_invalid_page_size(self, client, user_token):
-        """page_size > 100 → 422 (validation FastAPI)."""
-        res = client.get("/reservations?page_size=200", headers=auth(user_token))
-        assert res.status_code == 422
-
-    def test_invalid_page_zero(self, client, user_token):
-        """page=0 → 422 (page doit être >= 1)."""
-        res = client.get("/reservations?page=0", headers=auth(user_token))
-        assert res.status_code == 422
+        assert res.json() == []
 
 
 # ── PUT /reservations/{id} ───────────────────────────────────────────────────
@@ -238,7 +197,7 @@ class TestDeleteReservation:
         rid = self._create_reservation(client, admin_token, room)
         client.delete(f"/reservations/{rid}", headers=auth(admin_token))
         reservations = client.get("/reservations", headers=auth(admin_token)).json()
-        ids = [r["id"] for r in reservations["items"]]
+        ids = [r["id"] for r in reservations]
         assert rid not in ids
 
     def test_user_cannot_delete(self, client, user_token, admin_token, room):
