@@ -1,27 +1,46 @@
+"""
+Point d'entrée de l'application FastAPI — Resource Manager.
+
+Initialise l'application, enregistre les middlewares et monte les routers.
+
+Note : la création des tables est gérée par Alembic (alembic upgrade head).
+Ne pas utiliser Base.metadata.create_all() ici en production.
+"""
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from app.database import engine, Base
-from app.models import *
+from app.models import *  # noqa: F401,F403 — nécessaire pour Alembic
 from app.routes import room_routes, reservation_routes, equipment_routes, auth_routes
 
-Base.metadata.create_all(bind=engine)
+app = FastAPI(
+    title="Resource Manager API",
+    description="API de gestion des réservations de salles et équipements.",
+    version="1.0.0"
+)
 
-app = FastAPI()
+# ── Middlewares ──────────────────────────────────────────────────────────────
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:3000"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"]
+)
+
+# ── Routers ──────────────────────────────────────────────────────────────────
+app.include_router(auth_routes.router)
 app.include_router(room_routes.router)
 app.include_router(reservation_routes.router)
 app.include_router(equipment_routes.router)
-app.include_router(auth_routes.router)
 
-app.add_middleware(CORSMiddleware, allow_origins=["http://localhost:3000"], allow_credentials=True, allow_methods=["*"], allow_headers=["*"])
 
-@app.get("/")
+@app.get("/", tags=["root"])
 def root():
+    """Vérifie que l'API est en ligne."""
     return {"message": "API Resource Manager running 🚀"}
 
-# 👇 TEST DB (temporaire)
-try:
-    connection = engine.connect()
-    print("✅ DB connectée")
-    connection.close()
-except Exception as e:
-    print("❌ Erreur DB:", e)
+
+@app.get("/health", tags=["root"])
+def health():
+    """Health check pour load balancer ou monitoring."""
+    return {"status": "ok"}
