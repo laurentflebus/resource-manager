@@ -1,255 +1,162 @@
+/**
+ * Composant principal — vue calendrier des réservations.
+ *
+ * Responsabilités :
+ *   - Affichage du calendrier FullCalendar avec les réservations formatées
+ *   - Sélection d'une plage horaire → ouverture de ReservationModal
+ *   - Drag-and-drop / resize → mise à jour via useReservations
+ *   - Clic sur un événement → suppression (admin uniquement)
+ *   - Tooltip au survol d'un événement
+ *   - Filtre visuel par type de ressource (salles / équipements / tout)
+ *
+ * La logique métier (fetch, create, delete, update) est entièrement
+ * déléguée au hook useReservations. Ce composant ne gère que l'UI.
+ */
+
 import FullCalendar from "@fullcalendar/react"
 import dayGridPlugin from "@fullcalendar/daygrid"
 import timeGridPlugin from "@fullcalendar/timegrid"
 import interactionPlugin from "@fullcalendar/interaction"
-import { useEffect, useState } from "react"
-import { useNavigate } from "react-router-dom"
+import { useState } from "react"
+import { useAuth } from "../context/AuthContext"
+import { useReservations } from "../hooks/useReservations"
+import { hasConflict } from "../utils/calendarHelpers"
+import ReservationModal from "./ReservationModal"
 
 export default function CalendarView() {
-
-
-    // ================= STATE =================
-    const [events, setEvents] = useState([])
     const [modalOpen, setModalOpen] = useState(false)
     const [selection, setSelection] = useState(null)
-
-    const [type, setType] = useState("room")
-    const [id, setId] = useState("")
     const [filter, setFilter] = useState("all")
 
-    const [rooms, setRooms] = useState([])
-    const [equipment, setEquipment] = useState([])
+    const { role } = useAuth()
+    const {
+        events,
+        rooms,
+        equipment,
+        loading,
+        error,
+        createReservation,
+        deleteReservation,
+        updateReservation
+    } = useReservations()
 
-    const navigate = useNavigate()
+    // ── Filtre côté client ───────────────────────────────────────────────────
+    const filteredEvents = filter === "all"
+        ? events
+        : events.filter(e => e.extendedProps.type === filter)
 
-    const token = localStorage.getItem("token")
-    const role = localStorage.getItem("role")
+    // ── Handlers FullCalendar ────────────────────────────────────────────────
 
-    // ================= FETCH RESERVATIONS =================
-    useEffect(() => {
-        fetchMeta()
-    }, [])
-
-    useEffect(() => {
-        if (rooms.length > 0 && equipment.length > 0) {
-            fetchReservations()
-        }
-    }, [rooms, equipment])
-
-    const fetchReservations = async () => {
-        const res = await fetch("http://127.0.0.1:8000/reservations", {
-            headers: {
-                Authorization: `Bearer ${token}`
-            }
-        })
-
-        const data = await res.json()
-
-        if (!Array.isArray(data)) {
-            console.error("API error:", data)
-            return
-        }
-
-        const formatted = data.map(r => {
-
-            const room = rooms.find(x => Number(x.id) === Number(r.room_id))
-            const equip = equipment.find(x => Number(x.id) === Number(r.equipment_id))
-
-            const getColor = (type, id) => {
-                if (type === "room") {
-                    const colors = ["#4f46e5", "#6366f1", "#818cf8"]
-                    return colors[id % colors.length]
-                } else {
-                    const colors = ["#16a34a", "#22c55e", "#4ade80"]
-                    return colors[id % colors.length]
-                }
-            }
-
-            return {
-                id: r.id,
-
-                title: r.room_id
-                    ? `🏢 ${room?.name ?? r.room_name ?? "Salle inconnue"} - ${room?.location ?? "?"}`
-                    : `🧰 ${equip?.name ?? r.equipment_name ?? "Matériel inconnu"}`,
-
-                start: r.start_time,
-                end: r.end_time,
-
-                backgroundColor: getColor(
-                    r.room_id ? "room" : "equipment",
-                    r.room_id || r.equipment_id
-                ),
-
-                extendedProps: {
-                    type: r.room_id ? "room" : "equipment",
-                    location: room?.location || "—"
-                }
-            }
-        })
-
-        setEvents(formatted)
-    }
-
-    // ================= FETCH ROOMS + EQUIPMENT =================
-    const fetchMeta = async () => {
-        try {
-            const [r1, r2] = await Promise.all([
-                fetch("http://127.0.0.1:8000/rooms", {
-                    headers: { Authorization: `Bearer ${token}` }
-                }),
-                fetch("http://127.0.0.1:8000/equipments", {
-                    headers: { Authorization: `Bearer ${token}` }
-                })
-            ])
-
-            setRooms(await r1.json())
-            setEquipment(await r2.json())
-        } catch (err) {
-            console.error(err)
-        }
-    }
-
-    // ================= CREATE RESERVATION =================
-    const handleCreate = async () => {
-
-        if (!selection || !id) return
-
-        const now = new Date()
-        if (selection.start < now || selection.end < now) {
-            alert("⛔ Impossible de créer une réservation dans le passé")
-            return
-        }
-
-        if (selection.end <= selection.start) {
-            alert("⛔ Date de fin invalide")
-            return
-        }
-
-        const payload =
-            type === "room"
-                ? {
-                    room_id: Number(id),
-                    start_time: selection.start,
-                    end_time: selection.end
-                }
-                : {
-                    equipment_id: Number(id),
-                    start_time: selection.start,
-                    end_time: selection.end
-                }
-
-        await fetch("http://127.0.0.1:8000/reservations", {
-            method: "POST",
-            headers: {
-                "Content-Type": "application/json",
-                Authorization: `Bearer ${token}`
-            },
-            body: JSON.stringify(payload)
-        })
-
-        setModalOpen(false)
-        setId("")
-        fetchReservations()
-    }
-
-    // ================= DELETE RESERVATION =================
-    const handleDelete = async (id) => {
-        await fetch(`http://127.0.0.1:8000/reservations/${id}`, {
-            method: "DELETE",
-            headers: {
-                Authorization: `Bearer ${token}`
-            }
-        })
-        fetchReservations()
-    }
-    // ================= SELECT SLOT =================
+    /** Ouvre la modal de création quand l'utilisateur sélectionne une plage. */
     const handleSelect = (info) => {
         setSelection(info)
         setModalOpen(true)
     }
 
-    // ================= INIT =================
-    useEffect(() => {
-        fetchReservations()
-        fetchMeta()
-    }, [])
-
-    // ================= FILTERED EVENTS =================
-    const filteredEvents =
-        filter === "all"
-            ? events
-            : events.filter(e => e.extendedProps.type === filter)
-
-    // ================ PROTECTION SAME RESERVATION ============
-    const hasConflict = (event, allEvents) => {
-        return allEvents.some(e =>
-            e.id !== event.id &&
-            e.extendedProps.type === event.extendedProps.type &&
-            e.extendedProps.resourceId === event.extendedProps.resourceId &&
-            new Date(event.start) < new Date(e.end) &&
-            new Date(event.end) > new Date(e.start)
-        )
+    /** Relaye la création au hook et ferme la modal si succès. */
+    const handleCreate = async (params) => {
+        const result = await createReservation(params)
+        if (result.ok) setModalOpen(false)
+        return result
     }
 
-    // ================ UPDATE BACKEND ===================
-
+    /**
+     * Appelé après un drag-and-drop ou un resize.
+     * Vérifie d'abord le conflit côté client, puis appelle l'API.
+     * Appelle info.revert() si l'API refuse la mise à jour.
+     */
     const handleEventDrop = async (info) => {
-
-        const event = info.event
-
-        if (hasConflict(event, events)) {
+        if (hasConflict(info.event, events)) {
             alert("⚠️ Conflit de réservation détecté")
             info.revert()
             return
         }
-        // else update backend
-        const payload = {
-            start_time: event.start.toISOString(),
-            end_time: event.end.toISOString()
-        }
-
-        const res = await fetch(`http://127.0.0.1:8000/reservations/${event.id}`, {
-            method: "PUT",
-            headers: {
-                "Content-Type": "application/json",
-                Authorization: `Bearer ${token}`
-            },
-            body: JSON.stringify(payload)
+        const ok = await updateReservation(info.event.id, {
+            start: info.event.start,
+            end: info.event.end
         })
-
-        if (!res.ok) {
-            info.revert()
-            return
-        }
-
-        fetchReservations()
+        if (!ok) info.revert()
     }
 
-    // ================= RENDER =================
+    /**
+     * Clic sur un événement — suppression après confirmation.
+     * Ignoré si l'utilisateur n'est pas admin.
+     */
+    const handleEventClick = (info) => {
+        if (role !== "admin") return
+        if (window.confirm("Supprimer cette réservation ?")) {
+            deleteReservation(info.event.id)
+        }
+    }
+
+    // ── Tooltip ──────────────────────────────────────────────────────────────
+
+    /**
+     * Monte un tooltip DOM natif sur chaque événement du calendrier.
+     * Le tooltip est attaché à info.el._tooltip pour pouvoir le supprimer
+     * proprement dans handleEventWillUnmount.
+     */
+    const handleEventDidMount = (info) => {
+        info.el.style.cursor = role === "admin" ? "pointer" : "default"
+
+        const tooltip = document.createElement("div")
+        tooltip.innerHTML = `<strong>${info.event.title}</strong><br/>📍 ${info.event.extendedProps.location}`
+        Object.assign(tooltip.style, {
+            position: "absolute",
+            background: "#111",
+            color: "#fff",
+            padding: "6px 10px",
+            borderRadius: "6px",
+            fontSize: "12px",
+            display: "none",
+            zIndex: 9999,
+            pointerEvents: "none"
+        })
+        document.body.appendChild(tooltip)
+        info.el._tooltip = tooltip
+
+        info.el.addEventListener("mouseenter", (e) => {
+            tooltip.style.display = "block"
+            tooltip.style.left = e.pageX + 12 + "px"
+            tooltip.style.top = e.pageY + 12 + "px"
+        })
+        info.el.addEventListener("mousemove", (e) => {
+            tooltip.style.left = e.pageX + 12 + "px"
+            tooltip.style.top = e.pageY + 12 + "px"
+        })
+        info.el.addEventListener("mouseleave", () => {
+            tooltip.style.display = "none"
+        })
+    }
+
+    /** Supprime le tooltip DOM quand FullCalendar démonte un événement. */
+    const handleEventWillUnmount = (info) => {
+        info.el._tooltip?.remove()
+    }
+
+    // ── Rendu ────────────────────────────────────────────────────────────────
     return (
         <div style={{ height: "100%", display: "flex", flexDirection: "column", padding: 20 }}>
 
-            {/* FILTER */}
+            {/* Barre de filtre + indicateurs d'état */}
             <div style={{ marginBottom: 10 }}>
-                <select
-                    value={filter}
-                    onChange={(e) => setFilter(e.target.value)}
-                >
+                <select value={filter} onChange={(e) => setFilter(e.target.value)}>
                     <option value="all">Tout</option>
                     <option value="room">Salles</option>
                     <option value="equipment">Équipements</option>
                 </select>
+                {loading && (
+                    <span style={{ marginLeft: 12, fontSize: 13, color: "#6b7280" }}>
+                        Chargement…
+                    </span>
+                )}
+                {error && (
+                    <span style={{ marginLeft: 12, fontSize: 13, color: "#ef4444" }}>
+                        {error}
+                    </span>
+                )}
             </div>
 
-            <div style={{
-                display: "flex",
-                justifyContent: "space-between",
-                alignItems: "center",
-                marginBottom: 10
-            }}>
-            </div>
-
-            {/* CALENDAR */}
             <FullCalendar
                 plugins={[dayGridPlugin, timeGridPlugin, interactionPlugin]}
                 initialView="timeGridWeek"
@@ -261,164 +168,30 @@ export default function CalendarView() {
                 height="100%"
                 selectable={true}
                 select={handleSelect}
-                selectAllow={(info) => {
-                    return info.start.getTime >= Date.now()
-                }}
+                selectAllow={(info) => info.start.getTime() >= Date.now()}
                 events={filteredEvents}
                 nowIndicator={true}
                 slotMinTime="08:00:00"
                 slotMaxTime="20:00:00"
-                eventDidMount={(info) => {
-                    if (info.event.extendedProps.hasConflict) {
-                        info.el.style.backgroundColor = "#ef4444"
-                    }
-                    info.el.style.cursor = "grab"
-                    const tooltip = document.createElement("div")
-
-                    tooltip.className = "fc-tooltip"
-                    tooltip.innerHTML = info.event.title
-
-                    info.el._tooltip = tooltip
-
-                    tooltip.innerHTML = `<strong>${info.event.title}</strong><br/>📍 ${info.event.extendedProps.location}`
-                    tooltip.style.position = "absolute"
-                    tooltip.style.background = "#111"
-                    tooltip.style.color = "#fff"
-                    tooltip.style.padding = "6px 10px"
-                    tooltip.style.borderRadius = "6px"
-                    tooltip.style.fontSize = "12px"
-                    tooltip.style.display = "none"
-                    tooltip.style.zIndex = 9999
-
-                    document.body.appendChild(tooltip)
-
-                    info.el.addEventListener("mouseenter", (e) => {
-                        tooltip.style.display = "block"
-                        tooltip.style.left = e.pageX + 10 + "px"
-                        tooltip.style.top = e.pageY + 10 + "px"
-                    })
-
-                    info.el.addEventListener("mouseleave", () => {
-                        tooltip.style.display = "none"
-                    })
-                }}
                 editable={role === "admin"}
                 eventStartEditable={role === "admin"}
                 eventDurationEditable={role === "admin"}
-                eventStartEditable={true}
-                eventDurationEditable={true}
                 eventDrop={handleEventDrop}
                 eventResize={handleEventDrop}
-                eventChange={() => { }}
-                eventWillUnmount={(info) => {
-                    if (info.el._tooltip) {
-                        info.el._tooltip.remove()
-                    }
-                }}
-                eventClick={(info) => {
-                    if (window.confirm("Supprimer cette réservation ?")) {
-                        handleDelete(info.event.id)
-                    }
-                }}
+                eventChange={() => {}}
+                eventClick={handleEventClick}
+                eventDidMount={handleEventDidMount}
+                eventWillUnmount={handleEventWillUnmount}
             />
 
-            {/* ================= MODAL ================= */}
             {modalOpen && (
-                <div
-                    onClick={() => setModalOpen(false)}
-                    style={{
-                        position: "fixed",
-                        inset: 0,
-                        background: "rgba(0,0,0,0.5)",
-                        display: "flex",
-                        alignItems: "center",
-                        justifyContent: "center",
-                        zIndex: 9999
-                    }}
-                >
-                    <div
-                        onClick={(e) => e.stopPropagation()}
-                        style={{
-                            background: "white",
-                            padding: 24,
-                            borderRadius: 12,
-                            width: 350
-                        }}
-                    >
-
-                        <h3 style={{ marginBottom: 10 }}>
-                            Nouvelle réservation
-                        </h3>
-
-                        <div style={{ fontSize: 12, marginBottom: 10 }}>
-                            {selection?.start?.toString()} → {selection?.end?.toString()}
-                        </div>
-
-                        {/* TYPE */}
-                        <select
-                            value={type}
-                            onChange={(e) => setType(e.target.value)}
-                            style={{ width: "100%", marginBottom: 10 }}
-                        >
-                            <option value="room">Salle</option>
-                            <option value="equipment">Équipement</option>
-                        </select>
-
-                        {/* DYNAMIC SELECT */}
-                        {type === "room" ? (
-                            <select
-                                value={id}
-                                onChange={(e) => setId(e.target.value)}
-                                style={{ width: "100%", marginBottom: 10 }}
-                            >
-                                <option value="">Choisir salle</option>
-                                {(rooms || []).map(r => (
-                                    <option key={r.id} value={r.id}>
-                                        {r.name}
-                                    </option>
-                                ))}
-                            </select>
-                        ) : (
-                            <select
-                                value={id}
-                                onChange={(e) => setId(e.target.value)}
-                                style={{ width: "100%", marginBottom: 10 }}
-                            >
-                                <option value="">Choisir équipement</option>
-                                {(equipment || []).map(e => (
-                                    <option key={e.id} value={e.id}>
-                                        {e.name}
-                                    </option>
-                                ))}
-                            </select>
-                        )}
-
-                        <button
-                            onClick={handleCreate}
-                            style={{
-                                width: "100%",
-                                background: "#4f46e5",
-                                color: "white",
-                                padding: 10,
-                                borderRadius: 6,
-                                border: "none"
-                            }}
-                        >
-                            Créer
-                        </button>
-
-                        <button
-                            onClick={() => setModalOpen(false)}
-                            style={{
-                                width: "100%",
-                                marginTop: 10
-                            }}
-                        >
-                            Annuler
-                        </button>
-
-                    </div>
-                </div>
+                <ReservationModal
+                    selection={selection}
+                    rooms={rooms}
+                    equipment={equipment}
+                    onConfirm={handleCreate}
+                    onClose={() => setModalOpen(false)}
+                />
             )}
 
         </div>

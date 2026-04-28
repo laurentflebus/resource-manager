@@ -1,16 +1,20 @@
 import { useState } from "react"
+import { useAuth } from "../context/AuthContext"
+import { API_URL } from "../services/api"
 
-export default function Login({ onLogin }) {
+export default function Login() {
     const [email, setEmail] = useState("")
     const [password, setPassword] = useState("")
     const [error, setError] = useState("")
+    const [hovered, setHovered] = useState(false)
+    const { login } = useAuth()
 
     const handleSubmit = async (e) => {
         e.preventDefault()
         setError("")
 
         try {
-            const res = await fetch("http://127.0.0.1:8000/auth/login", {
+            const res = await fetch(`${API_URL}/auth/login`, {
                 method: "POST",
                 headers: {
                     "Content-Type": "application/x-www-form-urlencoded"
@@ -22,19 +26,13 @@ export default function Login({ onLogin }) {
             })
 
             const data = await res.json()
-            const token = data.access_token
-            const payload = JSON.parse(atob(token.split('.')[1]))
-
-            console.log("LOGIN RESPONSE:", data)
 
             if (!res.ok) {
                 setError(data.detail || "Erreur login")
                 return
             }
 
-            localStorage.setItem("token", token)
-            localStorage.setItem("role", payload.role)
-            onLogin()
+            login(data.access_token)
 
         } catch (err) {
             setError("Erreur serveur")
@@ -101,17 +99,20 @@ export default function Login({ onLogin }) {
                     }}
                 />
 
-                <button onMouseOver={(e) => e.target.style.background = "#4338ca"} onMouseOut={(e) => e.target.style.background = "#4f46e5"}
+                <button
                     type="submit"
+                    onMouseEnter={() => setHovered(true)}
+                    onMouseLeave={() => setHovered(false)}
                     style={{
                         width: "100%",
-                        background: "#4f46e5",
+                        background: hovered ? "#4338ca" : "#4f46e5",
                         color: "white",
                         padding: 10,
                         borderRadius: 6,
                         border: "none",
                         cursor: "pointer",
-                        fontWeight: "bold"
+                        fontWeight: "bold",
+                        transition: "background 0.15s"
                     }}
                 >
                     Se connecter
