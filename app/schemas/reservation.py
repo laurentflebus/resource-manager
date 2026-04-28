@@ -1,26 +1,83 @@
+"""
+Schémas Pydantic pour les réservations.
+
+Classes :
+    ReservationBase       Champs communs (room_id, equipment_id, start_time, end_time)
+    ReservationCreate     Schéma d'entrée pour POST /reservations (hérite de Base)
+    ReservationUpdate     Schéma d'entrée pour PUT /reservations/{id} (tous les champs optionnels)
+    ReservationResponse   Schéma de sortie enrichi avec user_id, room_name, equipment_name
+    PaginatedResponse     Enveloppe paginée retournée par GET /reservations
+"""
+
 from pydantic import BaseModel
 from datetime import datetime
-from typing import Optional
-
+from typing import Optional, List
 
 
 class ReservationBase(BaseModel):
-    room_id: int | None = None
-    equipment_id: int | None = None
+    room_id: Optional[int] = None
+    equipment_id: Optional[int] = None
     start_time: datetime
     end_time: datetime
 
+
 class ReservationCreate(ReservationBase):
+    """Payload attendu pour créer une réservation. room_id ou equipment_id doit être renseigné."""
     pass
 
+
 class ReservationUpdate(BaseModel):
+    """
+    Payload pour mettre à jour une réservation (PATCH-like).
+    Tous les champs sont optionnels — seuls les champs fournis sont mis à jour.
+    """
     start_time: Optional[datetime] = None
     end_time: Optional[datetime] = None
     room_id: Optional[int] = None
     equipment_id: Optional[int] = None
 
-class ReservationResponse(ReservationBase):
-    id: int
 
-    class Config:
-        from_attributes = True
+class ReservationResponse(BaseModel):
+    """
+    Schéma de réponse complet retourné par l'API.
+
+    room_name et equipment_name sont résolus depuis les relations SQLAlchemy
+    par serialize_reservation() dans reservation_service.py.
+    """
+    id: int
+    user_id: Optional[int] = None
+    room_id: Optional[int] = None
+    equipment_id: Optional[int] = None
+    start_time: datetime
+    end_time: datetime
+    room_name: Optional[str] = None
+    equipment_name: Optional[str] = None
+
+    model_config = {"from_attributes": True}
+
+
+class PaginatedResponse(BaseModel):
+    """
+    Enveloppe paginée retournée par GET /reservations.
+
+    Champs :
+        items      : liste des réservations de la page courante
+        total      : nombre total de réservations (toutes pages confondues)
+        page       : numéro de la page courante (commence à 1)
+        page_size  : nombre d'éléments par page
+        pages      : nombre total de pages
+
+    Exemple de réponse :
+        {
+            "items": [...],
+            "total": 42,
+            "page": 2,
+            "page_size": 10,
+            "pages": 5
+        }
+    """
+    items: List[ReservationResponse]
+    total: int
+    page: int
+    page_size: int
+    pages: int

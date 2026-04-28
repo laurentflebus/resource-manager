@@ -1,29 +1,35 @@
-# Foction de detection de conflits / anti double réservation
-from app.models.reservation import Reservation
-from app.models.equipment import Equipment
-from sqlalchemy.orm import Session
-from sqlalchemy import func
+"""
+Service métier pour les réservations.
+
+Contient :
+- has_room_conflict()       : détecte les chevauchements sur une salle
+- has_equipment_conflict()  : détecte les dépassements de stock sur un équipement
+- serialize_reservation()   : convertit un objet SQLAlchemy en ReservationResponse Pydantic
+"""
+
 from datetime import datetime
 
+from sqlalchemy.orm import Session
+
+from app.models.reservation import Reservation
+from app.models.equipment import Equipment
+from app.schemas.reservation import ReservationResponse
 
 
-def has_room_conflict(db: Session, room_id: int, start_time:datetime, end_time:datetime) -> bool:
+def has_room_conflict(db: Session, room_id: int, start_time: datetime, end_time: datetime) -> bool:
     """
-    Check if there is a reservation conflict for a given room and time period.
-
-    This function queries the database to determine if any existing reservation
-    for the specified room overlaps with the given start and end times.
+    Vérifie s'il existe une réservation qui chevauche la plage horaire demandée
+    pour une salle donnée.
 
     Args:
-        db (Session): The database session used to query reservations.
-        room_id (int): The ID of the room to check for conflicts.
-        start_time (datetime): The start time of the proposed reservation.
-        end_time (datetime): The end time of the proposed reservation.
+        db:         Session SQLAlchemy.
+        room_id:    Identifiant de la salle.
+        start_time: Début de la plage à tester.
+        end_time:   Fin de la plage à tester.
 
     Returns:
-        bool: True if there is a conflict (overlapping reservation exists), False otherwise.
+        True s'il y a un conflit (la salle est déjà réservée), False sinon.
     """
-    # Vérifie s'il existe une réservation pour la même salle qui chevauche les heures données
     conflict = db.query(Reservation).filter(
         Reservation.room_id == room_id,
         Reservation.start_time < end_time,
@@ -31,31 +37,56 @@ def has_room_conflict(db: Session, room_id: int, start_time:datetime, end_time:d
     ).first()
     return conflict is not None
 
-def has_equipment_conflict(db: Session, equipment_id: int, start_time:datetime, end_time:datetime) -> bool:
-    """
-    Check if there is an equipment conflict for a given equipment and time period.
 
-    This function verifies if the requested equipment is available during the specified time
-    by checking the number of overlapping reservations against the equipment's available quantity.
+def has_equipment_conflict(db: Session, equipment_id: int, start_time: datetime, end_time: datetime) -> bool:
+    """
+    Vérifie si le stock disponible d'un équipement est épuisé sur la plage horaire.
+
+    Un équipement avec quantity=N peut être réservé jusqu'à N fois en parallèle.
+    Au-delà, la réservation est refusée.
 
     Args:
-        db (Session): The database session used to query equipment and reservations.
-        equipment_id (int): The ID of the equipment to check for conflicts.
-        start_time (datetime): The start time of the proposed reservation.
-        end_time (datetime): The end time of the proposed reservation.
+        db:           Session SQLAlchemy.
+        equipment_id: Identifiant de l'équipement.
+        start_time:   Début de la plage à tester.
+        end_time:     Fin de la plage à tester.
 
     Returns:
-        bool: True if there is a conflict (not enough equipment available), False otherwise.
+        True s'il y a un conflit (stock insuffisant ou équipement introuvable), False sinon.
     """
     equipment = db.query(Equipment).filter(Equipment.id == equipment_id).first()
     if not equipment:
-        return True # equipment not found
-    
-    overlapping_reservations = db.query(Reservation).filter(
+        return True  # équipement introuvable → on bloque par sécurité
+
+    overlapping = db.query(Reservation).filter(
         Reservation.equipment_id == equipment_id,
         Reservation.start_time < end_time,
         Reservation.end_time > start_time
     ).count()
-    
-    return overlapping_reservations >= equipment.quantity
-    
+
+    return overlapping >= equipment.quantity
+
+
+def serialize_reservation(r: Reservation) -> ReservationResponse:
+    """
+    Convertit un objet Reservation SQLAlchemy en schéma Pydantic ReservationResponse,
+    en résolvant les noms de salle et d'équipement depuis les relations chargées.
+
+    Les relations `room` et `equipment` doivent être chargées (lazy='joined' sur le modèle).
+
+    Args:
+        r: Instance SQLAlchemy Reservation avec relations chargées.
+
+    Returns:
+        ReservationResponse avec room_name et equipment_name renseignés si disponibles.
+    """
+    return ReservationResponse(
+        id=r.id,
+        user_id=r.user_id,
+        room_id=r.room_id,
+        equipment_id=r.equipment_id,
+        start_time=r.start_time,
+        end_time=r.end_time,
+        room_name=r.room.name if r.room else None,
+        equipment_name=r.equipment.name if r.equipment else None,
+    )
