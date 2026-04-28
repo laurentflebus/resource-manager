@@ -1,9 +1,22 @@
-import { useNavigate } from "react-router-dom"
+import { useNavigate, useLocation } from "react-router-dom"
+import { useAuth } from "../context/AuthContext"
+
+const navBtnStyle = (active) => ({
+    width: "100%",
+    padding: 10,
+    marginBottom: 10,
+    background: active ? "#4338ca" : "#4f46e5",
+    color: "white",
+    border: "none",
+    borderRadius: 8,
+    cursor: "pointer",
+    fontWeight: active ? "bold" : "normal"
+})
 
 export default function Sidebar() {
-
     const navigate = useNavigate()
-    const role = localStorage.getItem("role")
+    const location = useLocation()
+    const { role } = useAuth()
 
     return (
         <div style={{
@@ -14,61 +27,19 @@ export default function Sidebar() {
         }}>
             <button
                 onClick={() => navigate("/")}
-                style={{
-                    width: "100%",
-                    padding: 10,
-                    marginBottom: 10,
-                    background: "#4f46e5",
-                    color: "white",
-                    border: "none",
-                    borderRadius: 8,
-                    cursor: "pointer"
-                }}
+                style={navBtnStyle(location.pathname === "/")}
             >
                 🗓️ Calendrier
             </button>
+
             {role === "admin" && (
                 <button
                     onClick={() => navigate("/admin")}
-                    style={{
-                        width: "100%",
-                        padding: 10,
-                        marginBottom: 20,
-                        background: "#111827",
-                        color: "white",
-                        border: "none",
-                        borderRadius: 8,
-                        cursor: "pointer"
-                    }}
+                    style={navBtnStyle(location.pathname === "/admin")}
                 >
                     ⚙️ Admin
                 </button>
             )}
-            <button style={{
-                width: "100%",
-                padding: 10,
-                background: "#16a34a",
-                color: "white",
-                border: "none",
-                borderRadius: 8,
-                marginBottom: 20,
-                cursor: "pointer"
-            }}>
-                ➕ Nouvelle réservation
-            </button>
-
-            {/* FILTERS */}
-            <div>
-                <h4>Filtres</h4>
-
-                <select style={{ width: "100%", marginBottom: 10 }}>
-                    <option>Toutes les salles</option>
-                </select>
-
-                <select style={{ width: "100%" }}>
-                    <option>Tout le matériel</option>
-                </select>
-            </div>
         </div>
     )
 }

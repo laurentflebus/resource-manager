@@ -1,15 +1,9 @@
 import { useNavigate } from "react-router-dom"
+import { useAuth } from "../context/AuthContext"
 
 export default function Navbar() {
-
     const navigate = useNavigate()
-    const role = localStorage.getItem("role")
-
-    const handleLogout = () => {
-        localStorage.removeItem("token")
-        localStorage.removeItem("role")
-        window.location.reload()
-    }
+    const { role, logout } = useAuth()
 
     return (
         <div style={{
@@ -31,7 +25,7 @@ export default function Navbar() {
                 <span>👤 {role}</span>
 
                 <button
-                    onClick={handleLogout}
+                    onClick={logout}
                     style={{
                         background: "#ef4444",
                         color: "white",
